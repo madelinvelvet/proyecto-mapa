@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mapa de Puntos</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+
+<h2>Mapa de Puntos de Interes</h2>
+
+<h3>Registrar nuevo punto</h3>
+
+<input type="text" id="nombre" placeholder="Nombre"><br><br>
+<input type="text" id="descripcion" placeholder="Descripcion"><br><br>
+
+<select id="categoria">
+  <option value="">Seleccionar categoria</option>
+  <option value="cultural">Cultural</option>
+  <option value="gastronomico">Gastronomico</option>
+  <option value="salud">Salud</option>
+  <option value="servicio">Servicio</option>
+  <option value="cafeteria">Cafeteria</option>
+  <option value="natural">Natural</option>
+  <option value="financiero">Financiero</option>
+</select><br><br>
+
+<input type="number" id="lat" placeholder="Latitud"><br><br>
+<input type="number" id="lng" placeholder="Longitud"><br><br>
+
+<button onclick="registrar()">Guardar punto</button>
+
+<hr>
+
+<h3>Busqueda</h3>
+
+<input type="number" id="radio" placeholder="Radio en metros">
+
+<select id="categoriaFiltro">
+  <option value="">Todas</option>
+  <option value="cultural">Cultural</option>
+  <option value="gastronomico">Gastronomico</option>
+  <option value="salud">Salud</option>
+  <option value="servicio">Servicio</option>
+  <option value="cafeteria">Cafeteria</option>
+  <option value="natural">Natural</option>
+  <option value="financiero">Financiero</option>
+</select>
+
+<button onclick="filtrar()">Buscar</button>
+<button onclick="cargarTodos()">Mostrar todos</button>
+
+<p>Haz clic en el mapa para elegir coordenadas</p>
+
+<div id="map" style="height: 500px;"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+var map = L.map('map').setView([14.6349, -90.5069], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: 'OpenStreetMap'
+}).addTo(map);
+
+let markers = [];
+let markerSeleccion = null;
+let circulo = null; // ← para el radio
+
+// CLICK EN MAPA
+map.on('click', function(e) {
+
+  const lat = e.latlng.lat;
+  const lng = e.latlng.lng;
+
+  document.getElementById("lat").value = lat;
+  document.getElementById("lng").value = lng;
+
+  if (markerSeleccion) {
+    map.removeLayer(markerSeleccion);
+  }
+
+  markerSeleccion = L.marker([lat, lng])
+    .addTo(map)
+    .bindPopup(`Punto seleccionado<br>Lat: ${lat}<br>Lng: ${lng}`)
+    .openPopup();
+});
+
+// LIMPIAR MARCADORES Y CÍRCULO
+function limpiarMarcadores() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+
+  if (circulo) {
+    map.removeLayer(circulo);
+    circulo = null;
+  }
+}
+
+// DIBUJAR PUNTOS
+function dibujarPuntos(data) {
+  limpiarMarcadores();
+
+  if (data.length === 0) {
+    alert("No hay resultados");
+    return;
+  }
+
+  data.forEach(p => {
+
+    const marker = L.marker([p.lat, p.lng])
+      .addTo(map)
+      .bindPopup(`
+        <b>${p.nombre}</b><br>
+        ${p.descripcion}<br>
+        Categoria: ${p.categoria}<br>
+        Lat: ${p.lat}<br>
+        Lng: ${p.lng}
+      `);
+
+    markers.push(marker);
+  });
+}
+
+// MOSTRAR TODOS
+function cargarTodos() {
+  limpiarMarcadores();
+
+  fetch('/api/puntos')
+    .then(res => res.json())
+    .then(data => dibujarPuntos(data));
+}
+
+// FILTRAR
+function filtrar() {
+
+  const lat = document.getElementById("lat").value;
+  const lng = document.getElementById("lng").value;
+  const radio = document.getElementById("radio").value;
+  const categoria = document.getElementById("categoriaFiltro").value;
+
+  let url = `/api/puntos/filtro?`;
+
+  if (lat && lng) {
+    url += `lat=${lat}&lng=${lng}`;
+  }
+
+  if (radio) {
+    url += `&radio=${radio}`;
+  }
+
+  if (categoria) {
+    url += `&categoria=${categoria}`;
+  }
+
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+
+      dibujarPuntos(data);
+
+      // DIBUJAR EL RADIO (CÍRCULO)
+      if (lat && lng && radio) {
+
+        if (circulo) {
+          map.removeLayer(circulo);
+        }
+
+        circulo = L.circle([lat, lng], {
+          radius: parseFloat(radio),
+          color: 'blue',
+          fillColor: '#3b82f6',
+          fillOpacity: 0.2
+        }).addTo(map);
+
+        map.setView([lat, lng], 15);
+      }
+
+    });
+}
+
+// REGISTRAR
+function registrar() {
+
+  const nombre = document.getElementById("nombre").value;
+  const descripcion = document.getElementById("descripcion").value;
+  const categoria = document.getElementById("categoria").value;
+  const lat = document.getElementById("lat").value;
+  const lng = document.getElementById("lng").value;
+
+  if (!nombre || !descripcion || !categoria || !lat || !lng) {
+    alert("Completa todos los campos");
+    return;
+  }
+
+  fetch('/api/puntos', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      nombre,
+      descripcion,
+      categoria,
+      lat,
+      lng
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    alert("Punto guardado");
+    cargarTodos();
+  });
+}
+
+// INICIO
+cargarTodos();
+
+</script>
+
+</body>
+</html>
